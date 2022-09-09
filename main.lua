@@ -248,6 +248,14 @@ local chanceValues do
 
     shared._id = httpService:GenerateGUID(false)
 
+    local function pressKey(keyCode, state)
+        if Options.PressMode.Value == 'virtual input' then
+            virtualInputManager:SendKeyEvent(state, keyCode, false, nil)
+        else
+            fireSignal(scrollHandler, userInputService[state and 'InputBegan' or 'InputEnded'], { KeyCode = keyCode, UserInputType = Enum.UserInputType.Keyboard }, false)
+        end
+    end
+
     local rng = Random.new()
     runService:BindToRenderStep(shared._id, 1, function()
         --if (not library.flags.autoPlayer) then return end
@@ -280,7 +288,8 @@ local chanceValues do
             if (arrow.Side == framework.UI.CurrentSide) and (not arrow.Marked) and currentlyPlaying.TimePosition > 0 then
                 local position = (arrow.Data.Position % count) .. '' 
 
-                local hitboxOffset = 0 do
+                local hitboxOffset = 0 
+                do
                     local settings = framework.Settings;
                     local offset = type(settings) == 'table' and settings.HitboxOffset;
                     local value = type(offset) == 'table' and offset.Value;
@@ -292,7 +301,8 @@ local chanceValues do
                     hitboxOffset = hitboxOffset / 1000
                 end
 
-                local songTime = framework.SongPlayer.CurrentTime do
+                local songTime = framework.SongPlayer.CurrentTime 
+                do
                     local configs = framework.SongPlayer.CurrentSongConfigs
                     local playbackSpeed = type(configs) == 'table' and configs.PlaybackSpeed
 
@@ -314,11 +324,7 @@ local chanceValues do
                         arrow.Marked = true;
                         local keyCode = keyCodeMap[arrowData[position].Keybinds.Keyboard[1]]
 
-                        if Options.PressMode.Value == 'Key press' then
-                            virtualInputManager:SendKeyEvent(true, keyCode, false, nil)
-                        else
-                            fireSignal(scrollHandler, userInputService.InputBegan, { KeyCode = keyCode, UserInputType = Enum.UserInputType.Keyboard }, false)
-                        end
+                        pressKey(keyCode, true)
 
                         local arrowLength = arrow.Data.Length or 0
                         local isHeld = arrowLength > 0
@@ -328,19 +334,11 @@ local chanceValues do
                         local minDelay = isHeld and Options.HeldDelayMin or Options.NoteDelayMin;
                         local maxDelay = isHeld and Options.HeldDelayMax or Options.NoteDelayMax;
                         local noteDelay = isHeld and Options.HeldDelay or Options.ReleaseDelay
-   
-                        if Options.DelayMode.Value == 'Random' then
-                            task.wait(arrowLength + rng:NextNumber(minDelay.Value, maxDelay.Value) / 1000)
-                        else
-                            task.wait(arrowLength + (noteDelay.Value / 1000))
-                        end
 
-                        if Options.PressMode.Value == 'Key press' then
-                            virtualInputManager:SendKeyEvent(false, keyCode, false, nil)
-                        else
-                            fireSignal(scrollHandler, userInputService.InputEnded, { KeyCode = keyCode, UserInputType = Enum.UserInputType.Keyboard }, false)
-                        end
+                        local delay = delayMode == 'Random' and rng:NextNumber(minDelay.Value, maxDelay.Value) or noteDelay.Value
+                        task.wait(arrowLength + (delay / 1000))
 
+                        pressKey(keyCode, false)
                         arrow.Marked = nil;
                     end)
                 end
@@ -378,9 +376,12 @@ local ActivateUnlockables do
                 for i, upv in next, upvalues do
                     if type(upv) == 'function' and getinfo(upv).name == 'LoadStyle' then
                         -- ugly but it works, we don't know every name for is_synapse_function and similar
-                        if getinfo(obj).source:match('%.ArrowSelector%.Customize$') and getinfo(upv).source:match('%.ArrowSelector%.Customize$') then
-                            -- avoid non-game functions :)
+                        local function isGameFunction(fn)
+                            return getinfo(fn).source:match('%.ArrowSelector%.Customize$')
+                        end
 
+                        if isGameFunction(obj) and isGameFunction(upv) then
+                            -- avoid non-game functions :)
                             loadStyle = loadStyle or upv
                             setupvalue(obj, i, loadStyleProxy)
 
@@ -410,18 +411,18 @@ end
 
 -- UpdateScore hook
 do
-    local roundManager = nil;
-    repeat
+    while type(roundManager) ~= 'table' do
         task.wait()
         roundManager = network.Server.RoundManager
-    until roundManager;
-    local oldUpdateScore = type(roundManager) == 'table' and roundManager.UpdateScore;
+    end
 
+    local oldUpdateScore = roundManager.UpdateScore;
     function roundManager.UpdateScore(...)
         local args = { ... }
         local score = args[2]
 
         if type(score) == 'number' and Options.ScoreModifier then
+        --    table.foreach(args, warn)
             if Options.ScoreModifier.Value == 'No decrease on miss' then
                 args[2] = 0
             elseif Options.ScoreModifier.Value == 'Increase score on miss' then
@@ -619,33 +620,40 @@ Tabs.Miscellaneous = Window:AddTab('Miscellaneous')
 
 Groups.Autoplayer = Tabs.Main:AddLeftGroupbox('Autoplayer')
     Groups.Autoplayer:AddToggle('Autoplayer', { Text = 'Autoplayer' }):AddKeyPicker('AutoplayerBind', { Default = 'End', NoUI = true, SyncToggleState = true })
-    Groups.Autoplayer:AddDropdown('PressMode', { Text = 'Key press mode', Default = 'Fire signal', Values = { 'Fire signal', 'Key press' }, Tooltip = 'Set this to "Key press" if the other mode does not work' })
-
-    Groups.Autoplayer:AddDivider()
-    Groups.Autoplayer:AddDropdown('AutoplayerMode', { Text = 'Autoplayer mode', Default = 1, Values = { 'Chances', 'Manual' } })
-    Groups.Autoplayer:AddDropdown('DelayMode', { Text = 'Delay mode', Default = 1, Values = { 'Manual', 'Random' } })
-
-    Groups.Autoplayer:AddDivider()
-    Groups.Autoplayer:AddDropdown('ScoreModifier', { 
-        Text = 'Score modifications', 
-        Default = 1, 
-        Values = { 'Do nothing', 'No decrease on miss', 'Increase score on miss' },
-        Tooltip = 'Modifies certain game functions to help you keep your score up!',
+    Groups.Autoplayer:AddDropdown('PressMode', {
+        Text = 'Input mode', 
+        Compact = true, 
+        Default = 'firesignal', 
+        Values = { 'firesignal', 'virtual input' }, 
+        Tooltip = 'Input method used to press arrows.\n* firesignal: calls input functions directly.\n* virtual input: emulates key presses. use if "firesignal" does not work.', 
     })
 
 Groups.HitChances = Tabs.Main:AddLeftGroupbox('Hit chances')
+    Groups.HitChances:AddDropdown('AutoplayerMode', { 
+        Text = 'Autoplayer mode', 
+        Compact = true, 
+        Default = 1, 
+        Values = { 'Automatic', 'Manual' },
+        Tooltip = 'Mode to use for deciding when to hit notes.\n* Automatic: hits notes based on chance sliders\n* Manual: hits notes based on held keybinds',
+    })
+
     Groups.HitChances:AddSlider('SickChance',   { Text = 'Sick chance', Min = 0, Max = 100, Default = 100, Suffix = '%', Rounding = 0, Compact = true })
     Groups.HitChances:AddSlider('GoodChance',   { Text = 'Good chance', Min = 0, Max = 100, Default = 0, Suffix = '%', Rounding = 0, Compact = true })
     Groups.HitChances:AddSlider('OkChance',     { Text = 'Ok chance',   Min = 0, Max = 100, Default = 0, Suffix = '%', Rounding = 0, Compact = true })
     Groups.HitChances:AddSlider('BadChance',    { Text = 'Bad chance',  Min = 0, Max = 100, Default = 0, Suffix = '%', Rounding = 0, Compact = true })
     Groups.HitChances:AddSlider('MissChance',   { Text = 'Miss chance', Min = 0, Max = 100, Default = 0, Suffix = '%', Rounding = 0, Compact = true })
 
-Groups.HitTiming = Tabs.Main:AddRightGroupbox('Hit timing')
-    --Groups.ManualTiming = Groups.HitTiming:AddTab('Manual delay')
+Groups.HitTiming = Tabs.Main:AddLeftGroupbox('Hit timing')
+    Groups.HitTiming:AddDropdown('DelayMode', { 
+        Text = 'Delay mode', 
+        Default = 1, 
+        Values = { 'Manual', 'Random' },
+        Tooltip = 'Adjustable timing for when to release notes.\n* Manual releases the note after a fixed amount of time.\n* Random releases the note after a random amount of time.', 
+    })
 
     Groups.HitTiming:AddLabel('Manual delay')
-    Groups.HitTiming:AddSlider('ReleaseDelay',   { Text = 'Release delay', Min = 0, Max = 500, Default = 20, Rounding = 0, Compact = true, Suffix = 'ms' })
-    Groups.HitTiming:AddSlider('HeldDelay',      { Text = 'Held delay', Min = -20, Max = 100, Default = 0, Rounding = 0, Compact = true, Suffix = 'ms' })
+    Groups.HitTiming:AddSlider('ReleaseDelay',   { Text = 'Note delay', Min = 0, Max = 500, Default = 20, Rounding = 0, Compact = true, Suffix = 'ms' })
+    Groups.HitTiming:AddSlider('HeldDelay',      { Text = 'Held note delay', Min = -20, Max = 100, Default = 0, Rounding = 0, Compact = true, Suffix = 'ms' })
         
     Groups.HitTiming:AddLabel('Random delay')
     Groups.HitTiming:AddSlider('NoteDelayMin',   { Text = 'Min note delay', Min = 0, Max = 100, Default = 0,    Rounding = 0, Compact = true, Suffix = 'ms' })
