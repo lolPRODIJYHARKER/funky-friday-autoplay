@@ -438,6 +438,44 @@ do
     end)
 end
 
+-- Auto ring collector
+do
+    local thread = task.spawn(function()
+        local map = workspace:waitForChild('Map', 5)
+        local buildings = map and map:waitForChild('FunctionalBuildings', 5)
+        local spawners = buildings and buildings:waitForChild('RingSpawners', 5)
+
+        if spawners == nil then return end
+        if type(firetouchinterest) ~= 'function' then return end 
+
+        while true do
+            task.wait()
+            if Toggles.AutoClaimRings and Toggles.AutoClaimRings.Value then
+                local character = client.Character
+                local rootPart = character and character:findFirstChild('HumanoidRootPart')
+
+                if rootPart == nil then continue end
+
+                for i, spawner in next, spawners:GetChildren() do
+                    for _, ring in next, spawner:GetChildren() do
+                        if ring.Name ~= 'GoldenRing' then continue end
+
+                        local ring = ring:findFirstChild('ring')
+                        if not (ring and ring:IsA('BasePart')) then continue end
+                        if ring.Transparency == 1 then continue end
+
+                        firetouchinterest(ring, rootPart, 0)
+                        firetouchinterest(ring, rootPart, 1)
+                    end
+                end
+            end
+        end
+    end)
+    table.insert(shared.callbacks, function()
+        pcall(task.cancel, thread)
+    end)
+end
+
 local SaveManager = {} do
     SaveManager.Ignore = {}
     SaveManager.Parser = {
@@ -662,8 +700,9 @@ Groups.HitTiming = Tabs.Main:AddLeftGroupbox('Hit timing')
     Groups.HitTiming:AddSlider('HeldDelayMin',   { Text = 'Min held note delay', Min = 0, Max = 100, Default = 0,   Rounding = 0, Compact = true, Suffix = 'ms' })
     Groups.HitTiming:AddSlider('HeldDelayMax',   { Text = 'Max held note delay', Min = 0, Max = 500, Default = 20,  Rounding = 0, Compact = true, Suffix = 'ms' })
 
-Groups.Unlockables = Tabs.Main:AddRightGroupbox('Unlockables')
-    Groups.Unlockables:AddButton('Unlock developer notes', ActivateUnlockables)
+Groups.Misc = Tabs.Main:AddRightGroupbox('Misc')
+    Groups.Misc:AddButton('Unlock developer notes', ActivateUnlockables)
+    Groups.Misc:AddToggle('AutoClaimRings', { Text = 'Auto claim rings' })
 
 Groups.Keybinds = Tabs.Main:AddRightGroupbox('Keybinds')
     Groups.Keybinds:AddLabel('Sick'):AddKeyPicker('SickBind', { Default = 'One', NoUI = true })
