@@ -712,8 +712,12 @@ Groups.Keybinds = Tabs.Main:AddRightGroupbox('Keybinds')
 
 Groups.Configs = Tabs.Miscellaneous:AddRightGroupbox('Configs')
 Groups.Credits = Tabs.Miscellaneous:AddRightGroupbox('Credits')
-    Groups.Credits:AddLabel('<font color="#3da5ff">wally</font> - script')
-    Groups.Credits:AddLabel('<font color="#de6cff">Sezei</font> - contributor')
+    local function addRichText(label)
+        label.TextLabel.RichText = true
+    end
+
+    addRichText(Groups.Credits:AddLabel('<font color="#3da5ff">wally</font> - script'))
+    addRichText(Groups.Credits:AddLabel('<font color="#de6cff">Sezei</font> - contributor'))
     Groups.Credits:AddLabel('Inori - ui library')
     Groups.Credits:AddLabel('Jan - old ui library')
 
@@ -737,7 +741,7 @@ if type(readfile) == 'function' and type(writefile) == 'function' and type(makef
     makefolder('funky_friday_autoplayer')
     makefolder('funky_friday_autoplayer\\configs')
 
-    Groups.Configs:AddDropdown('ConfigList', { Text = 'Config list', Values = {} })
+    Groups.Configs:AddDropdown('ConfigList', { Text = 'Config list', Values = {}, AllowNull = true })
     Groups.Configs:AddInput('ConfigName',    { Text = 'Config name' })
 
     Groups.Configs:AddDivider()
