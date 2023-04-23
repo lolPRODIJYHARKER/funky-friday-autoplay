@@ -1,5 +1,5 @@
 return {
-	version = '2.2a',
-	updated = '12/10/22',
-	message = 'Added "Auto claim rings"'
+	version = '2.2b',
+	updated = '4/23/23',
+	message = 'UI bug fixes'
 }
